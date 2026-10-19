@@ -1,0 +1,22 @@
+name: Conduit - Frontend Static Test
+
+on:
+  workflow_call:
+
+jobs:
+  lint: 
+    name: Frontend Static Test
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+    steps:
+      - name: ESLint (src + unit tests)
+        continue-on-error: true
+        run: |
+          cd /workspace/conduit/monorepo/frontend
+          echo ""
+          echo "========================="
+          echo "//== npm run lint  ==//"
+          echo "====================-===="
+          echo ""
+          npm run lint

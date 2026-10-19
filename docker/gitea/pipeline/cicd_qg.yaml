@@ -1,0 +1,92 @@
+name: Conduit - CI/CD - Demo AllPipelines
+
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+    branches: [main]
+
+jobs:
+  upd&dep-test(act-runner):
+    uses: ./.gitea/workflows/modules/_Update&Deploy-runner.yaml
+    
+  back-linter(optional):
+    #if: false
+    needs: upd&dep-test(act-runner)
+    uses: ./.gitea/workflows/modules/_lint-backend.yaml
+
+  front-liner(optional):
+    #if: false
+    needs: upd&dep-test(act-runner)
+    uses: ./.gitea/workflows/modules/_lint-frontend.yaml   
+     
+  QG-CI_push:
+    needs: [back-linter(optional), front-liner(optional)]
+    runs-on: self-hosted
+    steps:
+      - name: Gatekeeper
+        run: echo "Все линтеры прошли, открываю ворота на следующий этап!"  
+  
+  back-unit:
+    #if: false
+    needs: QG-CI_push
+    uses: ./.gitea/workflows/modules/_unit-backend.yaml   
+           
+  front-unit:
+    if: false
+    needs: QG-CI_push
+    uses: ./.gitea/workflows/modules/_unit-frontend.yaml  
+
+  QG-CI_mr_open:
+    needs: [back-unit]
+    runs-on: self-hosted
+    steps:
+      - name: Gatekeeper
+        run: echo "Все линтеры прошли, открываю ворота на следующий этап!"
+  
+  front-pact:
+    #if: false
+    needs: QG-CI_mr_open
+    uses: ./.gitea/workflows/modules/_pact-consumer.yaml 
+
+  front-pact-check:
+    #if: false
+    needs: front-pact
+    uses: ./.gitea/workflows/modules/_f-pact-can-i-deploy.yaml
+  
+  back-pact:
+    #if: false
+    needs: QG-CI_mr_open
+    uses: ./.gitea/workflows/modules/_pact-provider-verifier.yaml
+
+  back-pact-check:
+    #if: false
+    needs: back-pact
+    uses: ./.gitea/workflows/modules/_b-pact-can-i-deploy.yaml
+  
+  QG-CI_mr_close:
+    needs: [front-pact, front-pact-check, back-pact, back-pact-check]
+    runs-on: self-hosted
+    steps:
+      - name: Gatekeeper
+        run: echo "Все линтеры прошли, открываю ворота на следующий этап!"
+  
+  upd&dep-stage(app):
+    #if: false
+    needs: QG-CI_mr_close
+    uses: ./.gitea/workflows/modules/_Update&Deploy-app.yaml
+
+  integration:
+    #if: false
+    needs: upd&dep-stage(app)
+    uses: ./.gitea/workflows/modules/_Update&Deploy-app.yaml
+
+  QG-CD_deploy:
+    needs: [integration]
+    runs-on: self-hosted
+    steps:
+      - name: Gatekeeper
+        run: echo "Все линтеры прошли, открываю ворота на следующий этап!"

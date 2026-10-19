@@ -1,0 +1,75 @@
+[tool.poetry]
+package-mode = false
+name = "fastapi-realworld-example-app"
+version = "0.0.0"
+description = "Backend logic implementation for https://github.com/gothinkster/realworld with awesome FastAPI"
+authors = ["Nik Sidnev <sidnev.nick@gmail.com>"]
+license = "MIT"
+
+[tool.poetry.dependencies]
+python = "^3.9"
+uvicorn = "^0.18.2"
+fastapi = "^0.79.1"
+pydantic = { version = "^1.9", extras = ["email", "dotenv"] }
+passlib = { version = "^1.7", extras = ["bcrypt"] }
+bcrypt = ">=4.0.1,<4.1"
+pyjwt = "^2.4"
+databases = "^0.6.1"
+asyncpg = "^0.30.0"
+psycopg2-binary = "^2.9.3"
+aiosql = ">=6.2,<7"
+pypika = "^0.48.9"
+alembic = "^1.8"
+python-slugify = "^6.1"
+Unidecode = "^1.3"
+loguru = "^0.6.0"
+
+black = "^22.6.0"                           # Formatter: приводит код к стандарту "The Black Code Style"
+isort = "^5.10"                             # Formatter: сортирует импорты по группам и алфавиту
+autoflake = "^1.4"                          # Formatter: удаляет неиспользуемые импорты и переменные
+mypy = "^0.971"                             # Checker: статическая проверка типов (типобезопасность)
+httpx = "^0.23.0"
+asgi-lifespan = "^1.0.1"
+pact-python = "^2.0.0"                      # Pact: проверка совместимости API-контрактов
+requests = "^2.28.0"
+setuptools = "<70"
+pytest = "^7.1"
+pytest-cov = "^3.0"                         # CodeCoverage: подсчитывает покрытие (задействованный код)
+pytest-asyncio = "^0.19.0"
+pytest-env = "^0.6.2"
+pytest-xdist = "^2.4.0"
+wemake-python-styleguide = "0.18.0"         # Linter: проверка на правила WPS (строгое расширение PEP 8)
+flake8 = "6.1.0"                            # Linter: проверка на соответствие PEP 8
+
+[tool.poetry.group.dev.dependencies]
+
+[build-system]
+requires = ["poetry>=1.0"]
+build-backend = "poetry.masonry.api"
+
+[tool.pytest.ini_options]
+testpaths = ["unit_test"]
+filterwarnings = [
+    "ignore::DeprecationWarning",
+    "ignore::pytest.PytestDeprecationWarning",
+    "ignore::jwt.warnings.InsecureKeyLengthWarning",
+    "ignore:pkg_resources is deprecated as an API.*:DeprecationWarning",
+]
+addopts = [
+    "--strict-markers",
+    "--tb=short",
+    "--cov-report=term-missing",
+    "--cov-report=html",
+    "--cov-report=xml",
+    "--no-cov-on-fail",
+    "--cov-fail-under=95",
+    "--asyncio-mode=auto",
+    "--cov-config=setup.cfg",
+]
+env = [
+    "APP_ENV=test",
+    "SECRET_KEY=test-secret-key-test-secret-key-00000000",
+    "MAX_CONNECTIONS_COUNT=1",
+    "MIN_CONNECTIONS_COUNT=1",
+]
+asyncio_mode = "auto"

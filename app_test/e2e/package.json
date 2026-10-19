@@ -1,0 +1,14 @@
+{
+  "name": "conduit-e2e-tests",
+  "version": "1.0.0",
+  "description": "Playwright end-to-end tests for Conduit application",
+  "scripts": {
+    "test": "playwright test",
+    "test:headed": "playwright test --headed",
+    "test:debug": "playwright test --debug",
+    "report": "playwright show-report"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.40.0"
+  }
+}

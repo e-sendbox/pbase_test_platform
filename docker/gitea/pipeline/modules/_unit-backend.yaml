@@ -1,0 +1,30 @@
+name: Conduit - Backend Unit Test
+
+on:
+  workflow_call:
+
+jobs:
+  unit:
+    name: Backend Unit Test
+    runs-on: self-hosted
+    steps:  
+      - name: Run backend unit tests
+        env:
+          DATABASE_URL: "postgresql://postgres@db:5432/conduit_db"
+          SECRET_KEY: "test-secret-key-test-secret-key-00000000"
+          APP_ENV: "test"
+        run: |
+          echo ""
+          echo "============================"
+          echo "//== BACKEND UNIT TEST  ==//"
+          echo "============================"
+          echo ""
+          cd /workspace/conduit/monorepo/backend
+          poetry run pytest \
+            --cov=app/core \
+            --cov=app/db/queries \
+            --cov=app/models \
+            --cov=app/services \
+            --cov=app/resources \
+            --cov-report=term-missing \
+            unit_test

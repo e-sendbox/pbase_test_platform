@@ -1,0 +1,24 @@
+name: Conduit - Frontend Unit Test
+
+on:
+  workflow_call:
+
+jobs:
+  unit:
+    name: Frontend Unit Test
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+      DATABASE_URL: postgresql://postgres@db:5432/conduit_db
+      SECRET_KEY: test-secret-key-test-secret-key-00000000
+      APP_ENV: test
+    steps:
+      - name: Frontend unit tests
+        run: |
+          echo ""
+          echo "=========================="
+          echo "//== FRONT UNIT TEST  ==//"
+          echo "=========================="
+          echo ""
+          cd /workspace/conduit/monorepo/frontend
+          npm run test:unit -- --ci

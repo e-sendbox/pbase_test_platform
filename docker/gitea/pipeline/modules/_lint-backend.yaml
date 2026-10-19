@@ -1,0 +1,33 @@
+name: Conduit - Backend Static Test
+
+on:
+  workflow_call:
+
+jobs:
+  lint: 
+    name: Backend Static Test
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+    steps:
+      - name: CODE SAFETY - flake 8 (WPS) _ optional
+        continue-on-error: true
+        run: |
+          cd /workspace/conduit/monorepo/backend
+          echo ""
+          echo "========================="
+          echo "//== run flake8 app  ==//"
+          echo "========================="
+          echo ""
+          poetry run flake8 app
+          
+      - name: TYPE SAFETY - mypy (pydantic)
+        continue-on-error: true
+        run: |
+          cd /workspace/conduit/monorepo/backend
+          echo ""
+          echo "================================="
+          echo "//== run pydantyc.mypy app  ==//"
+          echo "================================="
+          echo ""
+          poetry run mypy app

@@ -1,0 +1,57 @@
+name: Conduit - Update APP
+
+on:
+  workflow_call:
+
+jobs:
+  unit:
+    name: Update APP
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+      DATABASE_URL: postgresql://postgres@db:5432/conduit_db
+      SECRET_KEY: test-secret-key-test-secret-key-00000000
+      APP_ENV: test
+    steps:
+      - name: Restart APP
+        run: |
+          set -e
+          echo ""
+          echo "=============================="
+          echo "//== RESTART CONDUIT-APP  ==//"
+          echo "=============================="
+          echo ""
+          docker restart conduit-app
+          i=0
+          while [ "$i" -lt 30 ]; do
+            if docker exec conduit-app curl -fsS http://localhost:80/health; then
+              exit 0
+            fi
+            i=$((i + 1))
+            sleep 2
+          done
+          exit 1
+          
+
+      - name: Install frontend dependencies
+        run: |
+          echo ""
+          echo "================================"
+          echo "//== FRONTEND DEPENDENCIES  ==//"
+          echo "================================"
+          echo ""
+          docker exec -t conduit-app /bin/sh -c \
+            "cd /workspace/conduit/monorepo/frontend && \
+            npm install --legacy-peer-deps"
+
+      - name: Install Poetry Dependencies
+        run: |
+          echo ""
+          echo "==============================="
+          echo "//== BACKEND DEPENDENCIES  ==//"
+          echo "==============================="
+          echo ""
+          docker exec -t conduit-app /bin/sh -c \
+            "cd /workspace/conduit/monorepo/backend && \
+            poetry install"
+          

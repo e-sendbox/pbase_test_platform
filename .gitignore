@@ -1,0 +1,51 @@
+# Environment variables
+.env
+.gitea-token
+
+# Node modules
+node_modules/
+frontend/node_modules/
+tests/pact/consumer/node_modules/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+backend/.venv/
+backend/venv/
+*.egg-info/
+dist/
+build/
+
+# Pact
+tests/pact/consumer/pacts/
+tests/pact/consumer/logs/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+*.log
+
+# Test coverage
+.coverage
+coverage.xml
+htmlcov/
+.pytest_cache/
+
+# Build artifacts
+frontend/build/
+
+# Host + runner bind-mount workspace; CI copies to workspace/conduit (never commit)
+workspace/*
+!workspace/.keep
+workspace/conduit/

@@ -1,0 +1,69 @@
+name: Conduit - Pact Provider
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  pact:
+    name: BPact Provider Verifier
+    runs-on: self-hosted
+    steps:     
+      - name: Startup API 
+        working-directory: /workspace/conduit/monorepo/backend
+        env:
+          SECRET_KEY: "test-secret-key-test-secret-key-00000000"
+          DATABASE_URL: "postgresql://postgres@172.17.0.1:5432/conduit_db"
+          PROVIDER_URL: http://localhost:8000
+          PACT_BROKER_BASE_URL: http://conduit-pact-broker:9292
+          GIT_COMMIT: ${{ github.sha }}
+          GIT_BRANCH: main
+        run: |
+          set -e
+          echo ""
+          echo "==========================="
+          echo "//== STARTUP FAST API  ==//"
+          echo "==========================="
+          echo ""
+          # Startup backend
+          nohup poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend_output.log 2>&1 &
+          # Check Backend
+          echo "⏳ Waiting for port 8000 to open..."
+          if ! timeout 30s bash -c 'until printf "" 2>>/dev/null >/dev/tcp/localhost/8000; do sleep 1; done'; then
+            echo "❌ Бэкенд не запустился вовремя! Вот последние логи:"
+            cat backend_output.log
+            exit 1
+          fi
+          echo "✅ Backend is UP! Running Pact Provider Verification..."
+        
+      - name: Verify Pact
+        run: |
+          echo ""
+          echo "============================="
+          echo "//== PROVIDER VERIFIER  ==//"
+          echo "============================="
+          echo ""
+          pact-provider-verifier \
+              --pact-broker-base-url="http://pact-broker:9292" \
+              --provider="conduit-backend" \
+              --provider-base-url="http://localhost:8000" \
+              --provider-states-setup-url="http://localhost:8000/api/_pact/provider-states" \
+              --provider-app-version="${{ github.sha }}" \
+              --publish-verification-results
+          
+      #- name: RROVIDER PACT VERIFICATION
+      #  working-directory: /workspace/conduit/monorepo/backend
+      #  env:
+      #    SECRET_KEY: "test-secret-key-test-secret-key-00000000"
+      #    DATABASE_URL: "postgresql://postgres@172.17.0.1:5432/conduit_db"
+      #    PROVIDER_URL: http://localhost:8000
+      #    PACT_BROKER_BASE_URL: http://conduit-pact-broker:9292
+      #    GIT_COMMIT: ${{ github.sha }}
+      #    GIT_BRANCH: main
+      #  run: |
+      #      echo ""
+      #      echo "================================="
+      #      echo "//== PROVIDER PACT VERIFIER  ==//"
+      #      echo "================================="
+      #      echo ""
+      #      poetry run python pact_test/provider/pact_verifier.py

@@ -1,0 +1,22 @@
+log:
+  level: debug
+
+runner:
+  enabled: true
+  path: /data/runner
+  url: "http://gitea:3000"
+  token: Q1XpgCUIaISMBaLI7Pea4jDcaDrRAYhF9d2YbSe4
+  capacity: 3
+  fetch_interval: "2s"
+  labels:
+    - "ubuntu-latest:host"
+    - "self-hosted"
+    - "ubuntu-latest"
+    - "linux"
+
+container:
+  network: "conduit-network"
+  docker_host: unix:///var/run/docker.sock
+  workdir: /workspace
+  volumes:
+    - ./workspace:/workspace

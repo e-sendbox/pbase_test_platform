@@ -1,0 +1,404 @@
+name: Conduit  CI/CD - Pipeline
+
+on:
+#  push:
+#    branches: [main]
+#  pull_request:
+#    branches: [main]
+  workflow_dispatch:
+    branches: [main]
+
+env:
+  PACT_BROKER_BASE_URL: http://pact-broker:9292 # не ясно, зачем прямо в пайпе
+  GIT_COMMIT: ${{ github.sha || gitea.sha }}
+  GIT_BRANCH: ${{ github.ref_name || gitea.ref_name }}
+  GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+
+jobs:
+  staticciyback: 
+    name: Static CI QG - Backend
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+    steps:
+      - name: Checkout code into conduit-act-runner
+        run: |
+          mkdir -p /workspace/conduit/monorepo || true
+          cd /workspace/conduit/monorepo
+          git init || true
+          git config --global safe.directory '*' || true
+          (git remote set-url origin "$GITEA_REPO" 2>/dev/null || git remote add origin "$GITEA_REPO")
+          git fetch origin main && git reset --hard origin/main
+
+      - name: Install dependencies poetry
+        run: |
+          cd /workspace/conduit/monorepo/backend
+          poetry install
+          
+      - name: CODE SAFETY - flake 8 (WPS) _ optional
+        continue-on-error: true
+        run: |
+          cd /workspace/conduit/monorepo/backend
+          echo ""
+          echo "//== run flake8 app  ==//"
+          echo ""
+          poetry run flake8 app
+          
+      - name: TYPE SAFETY - mypy (pydantic)
+        continue-on-error: true
+        run: |
+          cd /workspace/conduit/monorepo/backend
+          echo ""
+          echo "//== run pydantyc.mypy app  ==//"
+          echo ""
+          poetry run mypy app
+
+  staticciyfront:
+    name: Static CI QG - Frontend
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+    steps:
+      - name: Checkout code into conduit-act-runner
+        run: |
+          mkdir -p /workspace/conduit/monorepo || true
+          cd /workspace/conduit/monorepo
+          git init || true
+          git config --global safe.directory '*' || true
+          (git remote set-url origin "$GITEA_REPO" 2>/dev/null || git remote add origin "$GITEA_REPO")
+          git fetch origin main && git reset --hard origin/main
+
+      - name: Install frontend dependencies
+        run: |
+          cd /workspace/conduit/monorepo/frontend
+          npm install --legacy-peer-deps
+
+      - name: ESLint (src + unit tests)
+        continue-on-error: true
+        run: |
+          cd /workspace/conduit/monorepo/frontend
+          npm run lint
+
+  modulecifront:
+    name: Module QG - Frontend unit tests
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+    steps:
+      - name: Checkout code into conduit-act-runner
+        run: |
+          mkdir -p /workspace/conduit/monorepo || true
+          cd /workspace/conduit/monorepo
+          git init || true
+          git config --global safe.directory '*' || true
+          (git remote set-url origin "$GITEA_REPO" 2>/dev/null || git remote add origin "$GITEA_REPO")
+          git fetch origin main && git reset --hard origin/main
+
+      - name: Install frontend dependencies
+        run: |
+          cd /workspace/conduit/monorepo/frontend
+          npm install --legacy-peer-deps
+
+      - name: Frontend unit tests
+        run: |
+          cd /workspace/conduit/monorepo/frontend
+          npm run test:unit -- --ci
+
+  moduleciback:
+    name: Module QG
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+      DATABASE_URL: postgresql://postgres@db:5432/conduit_db
+      SECRET_KEY: test-secret-key-test-secret-key-00000000
+      APP_ENV: test
+    steps:
+      - name: Checkout code into conduit-act-runner
+        run: |
+          mkdir -p /workspace/conduit/monorepo || true
+          cd /workspace/conduit/monorepo
+          git init || true
+          git config --global safe.directory '*' || true
+          (git remote set-url origin "$GITEA_REPO" 2>/dev/null || git remote add origin "$GITEA_REPO")
+          git fetch origin main && git reset --hard origin/main
+
+      - name: Sync repository to app workspace
+        run: |
+          echo "Runner and conduit-app share docker-compose bind mount ./workspace:/workspace; checkout is already visible in conduit-app."
+          docker exec conduit-app mkdir -p /workspace/conduit/monorepo
+          docker exec conduit-app test -f /workspace/conduit/monorepo/backend/pyproject.toml
+          echo "Sync complete (shared volume)."
+
+      - name: Install Poetry
+        run: docker exec conduit-app sh -c "pip install poetry && poetry config virtualenvs.create false"
+
+      - name: Install backend dependencies
+        run: docker exec conduit-app sh -c "cd /workspace/conduit/monorepo/backend && poetry install"
+
+      - name: Clear database
+        run: |
+          docker exec conduit-db psql -U postgres -d conduit_db -c "TRUNCATE TABLE articles, users, tags RESTART IDENTITY CASCADE;"
+
+      - name: Run backend unit tests
+        run: |
+          docker exec \
+            -e DATABASE_URL="$DATABASE_URL" \
+            -e SECRET_KEY="$SECRET_KEY" \
+            -e APP_ENV="$APP_ENV" \
+            conduit-app sh -c "cd /workspace/conduit/monorepo/backend && poetry run pytest" 
+  
+  pactci:
+    name: Pact CI QG
+    runs-on: self-hosted
+    continue-on-error: true
+    env:
+      GIT_COMMIT: ${{ github.sha || gitea.sha }}
+      GIT_BRANCH: ${{ github.ref_name || gitea.ref_name }}
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+    steps:
+      - name: TMP Checkout code
+        run: |
+          mkdir -p /workspace/conduit/monorepo || true
+          cd /workspace/conduit/monorepo
+          git init || true
+          git config --global safe.directory '*' || true
+          (git remote set-url origin "$GITEA_REPO" 2>/dev/null || git remote add origin "$GITEA_REPO")
+          git fetch origin main && git reset --hard origin/main
+     
+      - name: Iinstall Consumer Dependences
+        working-directory: /workspace/conduit/monorepo/frontend/pact_test/consumer
+        run: rm -rf pacts logs && mkdir -p pacts logs && npm install --save-dev @pact-foundation/pact-cli
+     
+      - name: CONSUMER PACT TEST
+        working-directory: /workspace/conduit/monorepo/frontend/pact_test/consumer
+        run: npm test
+      
+      - name: PUBLISH CONSUMER CONTRACT
+        working-directory: /workspace/conduit/monorepo/frontend/pact_test/consumer
+        run: npm run publish:pacts
+
+      - name: Install backend dependencies (provider)
+        working-directory: /workspace/conduit/monorepo/backend
+        run: poetry install
+          
+      - name: Startup API 
+        working-directory: /workspace/conduit/monorepo/backend
+        env:
+          SECRET_KEY: "test-secret-key-test-secret-key-00000000"
+          DATABASE_URL: "postgresql://postgres@172.17.0.1:5432/conduit_db"
+          PROVIDER_URL: http://localhost:8000
+          PACT_BROKER_BASE_URL: http://conduit-pact-broker:9292
+          GIT_COMMIT: ${{ github.sha || gitea.sha }}
+          GIT_BRANCH: main
+        run: |
+          set -e
+          # Startup backend
+          nohup poetry run uvicorn app.main:app --host 0.0.0.0 --port 8000 > backend_output.log 2>&1 &
+          # Check Backend
+          echo "⏳ Waiting for port 8000 to open..."
+          if ! timeout 30s bash -c 'until printf "" 2>>/dev/null >/dev/tcp/localhost/8000; do sleep 1; done'; then
+            echo "❌ Бэкенд не запустился вовремя! Вот последние логи:"
+            cat backend_output.log
+            exit 1
+          fi
+          echo "✅ Backend is UP! Running Pact Provider Verification..."
+    
+      - name: RROVIDER PACT VERIFICATION
+        working-directory: /workspace/conduit/monorepo/backend
+        env:
+          SECRET_KEY: "test-secret-key-test-secret-key-00000000"
+          DATABASE_URL: "postgresql://postgres@172.17.0.1:5432/conduit_db"
+          PROVIDER_URL: http://localhost:8000
+          PACT_BROKER_BASE_URL: http://conduit-pact-broker:9292
+          GIT_COMMIT: ${{ github.sha || gitea.sha }}
+          GIT_BRANCH: main
+        run: poetry run python pact_test/provider/pact_verifier.py
+
+  
+  pactcd:
+    name: Pact CD QG
+    runs-on: self-hosted
+    continue-on-error: true
+    needs: pactci
+    env:
+      GIT_COMMIT: ${{ github.sha || gitea.sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Align GIT_COMMIT with checkout
+        run: echo "GIT_COMMIT=$(git rev-parse HEAD)" >> "$GITHUB_ENV"
+
+      - name: Ensure production environment exists
+        run: |
+          docker run --rm --network conduit-network \
+            pactfoundation/pact-cli:latest \
+            broker create-environment \
+            --name production \
+            --display-name Production \
+            --production \
+            --broker-base-url http://pact-broker:9292 \
+            2>/dev/null || true
+
+      - name: Record provider deployment in broker
+        run: |
+          docker run --rm --network conduit-network \
+            pactfoundation/pact-cli:latest \
+            broker record-deployment \
+            --pacticipant conduit-backend \
+            --version "$GIT_COMMIT" \
+            --environment production \
+            --broker-base-url http://pact-broker:9292
+
+      - name: Check if consumer deployment is safe
+        run: |
+          docker run --rm --network conduit-network \
+            pactfoundation/pact-cli:latest \
+            broker can-i-deploy \
+            --pacticipant conduit-frontend \
+            --version "$GIT_COMMIT" \
+            --to-environment production \
+            --broker-base-url http://pact-broker:9292 \
+            --retry-while-unknown 12 \
+            --retry-interval 10
+
+      - name: Record consumer deployment in broker
+        if: success()
+        run: |
+          docker run --rm --network conduit-network \
+            pactfoundation/pact-cli:latest \
+            broker record-deployment \
+            --pacticipant conduit-frontend \
+            --version "$GIT_COMMIT" \
+            --environment production \
+            --broker-base-url http://pact-broker:9292
+  
+
+  imagebuild:
+    name: Build and Deploy
+    runs-on: self-hosted
+    needs: [pactcd, staticciyfront, modulecifront, moduleciback]
+    env:
+      GIT_COMMIT: ${{ github.sha || gitea.sha }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Rebuild and restart application container
+        run: |
+          set -e
+          cd "${GITHUB_WORKSPACE:-.}"
+          # Use the same Compose project as the running stack (otherwise project name defaults to the
+          # checkout dir, e.g. hostexecutor, and `up` tries to create a second `conduit-app`).
+          COMPOSE_PROJECT_NAME=$(docker inspect conduit-app --format '{{ index .Config.Labels "com.docker.compose.project" }}')
+          export COMPOSE_PROJECT_NAME
+          echo "COMPOSE_PROJECT_NAME=$COMPOSE_PROJECT_NAME"
+          docker compose build app
+          docker compose up -d --no-deps app
+
+      # ШАГ СИНХРОНИЗАЦИИ (сразу после старта)
+      - name: Sync repository to app workspace
+        run: |
+          echo "Синхронизирую файлы в запущенный контейнер..."
+          # Создаем структуру папок внутри контейнера
+          docker exec conduit-app mkdir -p /workspace/conduit/monorepo
+          # Упаковываем текущий код на раннере и распаковываем его в контейнере
+          # --exclude='workspace' критически важен, чтобы не копировать пустую папку в саму себя
+          tar --exclude='./workspace' -cf - . | docker exec -i conduit-app tar -xf - -C /workspace/conduit/monorepo
+          echo "Готово! Теперь /workspace/conduit/monorepo содержит актуальный код."
+
+      - name: Wait for application health
+        run: |
+          set -e
+          i=0
+          while [ "$i" -lt 30 ]; do
+            if docker exec conduit-app curl -fsS http://localhost:80/health; then
+              exit 0
+            fi
+            i=$((i + 1))
+            sleep 2
+          done
+          exit 1
+
+  integrationtest:
+    name: Integration Tests (app_test API)
+    runs-on: self-hosted
+    needs: [imagebuild]
+    env:
+      BASE_URL: http://app
+    steps:
+      - name: Reset DB and seed demo data
+        run: |
+          set -e
+          docker exec conduit-db psql -U postgres -d conduit_db -c "TRUNCATE TABLE articles, users, tags RESTART IDENTITY CASCADE;"
+          docker exec conduit-app python /scripts/seed-database.py
+
+      - name: Install Poetry in app container
+        run: docker exec conduit-app sh -c "pip install -q poetry && poetry config virtualenvs.create false"
+
+      - name: Install backend dependencies (pytest)
+        run: docker exec conduit-app sh -c "cd /workspace/conduit/monorepo/backend && poetry install"
+
+      - name: Run API integration tests
+        run: |
+          docker exec \
+            -e BASE_URL="$BASE_URL" \
+            conduit-app sh -c "cd /workspace/conduit/monorepo/backend && poetry run pytest ../app_test/api --no-cov -v"
+
+  e2etest:
+    name: E2E Tests (Playwright)
+    runs-on: self-hosted
+    needs: [integrationtest]
+    env:
+      BASE_URL: http://app
+      CI: "true"
+    steps:
+      - name: Run Playwright smoke tests
+        run: |
+          set -e
+          docker run --rm \
+            --network conduit-network \
+            -v /workspace/conduit/monorepo:/repo \
+            -w /repo/app_test/e2e \
+            -e BASE_URL=http://app \
+            -e CI=1 \
+            mcr.microsoft.com/playwright:v1.40.0-jammy \
+            bash -ec "if [ -f package-lock.json ]; then npm ci; else npm install; fi && npx playwright test"
+
+  notify:
+    name: Notify Status
+    runs-on: self-hosted
+    needs:
+      - staticciyback
+      - staticciyfront
+      - moduleciback
+      - modulecifront
+      - pactci
+      - pactcd
+      - imagebuild
+      - integrationtest
+      - e2etest
+    if: always()
+    steps:
+      - name: Check pipeline status
+        run: |
+          echo "Pipeline Status:"
+          echo "Backend static (flake8/mypy): $STATIC_BACK"
+          echo "Frontend static (eslint): $STATIC_FRONT"
+          echo "Backend unit tests (app): $MODULE_BACK"
+          echo "Frontend unit tests (act-runner): $MODULE_FRONT"
+          echo "Pact CI: $PACT_CI"
+          echo "Pact CD / can-i-deploy: $PACT_CD"
+          echo "Build and Deploy: $IMAGEBUILD"
+          echo "Integration tests (app_test API): $INTEGRATION"
+          echo "E2E (Playwright): $E2E"
+        env:
+          STATIC_BACK: ${{ needs.staticciyback.result }}
+          STATIC_FRONT: ${{ needs.staticciyfront.result }}
+          MODULE_BACK: ${{ needs.moduleciback.result }}
+          MODULE_FRONT: ${{ needs.modulecifront.result }}
+          PACT_CI: ${{ needs.pactci.result }}
+          PACT_CD: ${{ needs.pactcd.result }}
+          IMAGEBUILD: ${{ needs.imagebuild.result }}
+          INTEGRATION: ${{ needs.integrationtest.result }}
+          E2E: ${{ needs.e2etest.result }}

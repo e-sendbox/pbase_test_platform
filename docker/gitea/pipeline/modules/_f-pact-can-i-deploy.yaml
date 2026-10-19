@@ -1,0 +1,38 @@
+name: Conduit - Pact Can I Deploy FRONTEND
+
+on:
+  workflow_call:
+
+jobs:
+  pact-check:
+    name: Pact Can I Deploy Frontend to STAGE
+    runs-on: self-hosted
+    steps:
+      - name: Check if consumer deployment is safe
+        run: |
+          echo ""
+          echo "======================================="
+          echo "//== can-i-deploy Frontend check  ==//"
+          echo "======================================"
+          echo ""
+          pact-broker can-i-deploy \
+            --pacticipant conduit-frontend \
+            --version ${{ github.sha }} \
+            --to-environment staging \
+            --broker-base-url http://pact-broker:9292 \
+            --retry-while-unknown 30 \
+            --retry-interval 10
+
+      - name: Record consumer deployment in broker
+        if: success()
+        run: |
+          echo ""
+          echo "====================================="
+          echo "//== Record Frontend to Brocker  ==//"
+          echo "====================================="
+          echo ""
+          pact-broker record-deployment \
+            --pacticipant conduit-frontend \
+            --version ${{ github.sha }} \
+            --environment staging \
+            --broker-base-url http://pact-broker:9292

@@ -1,0 +1,35 @@
+name: Conduit  CI/CD - Pipeline
+
+on:
+#  push:
+#    branches: [main]
+#  pull_request:
+#    branches: [main]
+  workflow_dispatch:
+    branches: [main]
+
+env:
+  PACT_BROKER_BASE_URL: http://pact-broker:9292 # не ясно, зачем прямо в пайпе
+  GIT_COMMIT: ${{ github.sha || gitea.sha }}
+  GIT_BRANCH: ${{ github.ref_name || gitea.ref_name }}
+  GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+
+jobs:
+  e2etest:
+    name: E2E Tests (Playwright)
+    runs-on: self-hosted
+    env:
+      BASE_URL: http://app
+      CI: "true"
+    steps:
+      - name: Run Playwright smoke tests
+        run: |
+          set -e
+          docker run --rm \
+            --network conduit-network \
+            -v /workspace/conduit/monorepo:/repo \
+            -w /repo/app_test/e2e \
+            -e BASE_URL=http://app \
+            -e CI=1 \
+            mcr.microsoft.com/playwright:v1.40.0-jammy \
+            bash -ec "if [ -f package-lock.json ]; then npm ci; else npm install; fi && npx playwright test"

@@ -1,0 +1,30 @@
+name: Conduit - Pact Consumer
+
+on:
+  workflow_call:
+
+jobs:
+  pact:
+    name: FPact Consumer Test & Publish
+    runs-on: self-hosted
+    steps:
+      - name: CONSUMER PACT TEST
+        working-directory: /workspace/conduit/monorepo/frontend/pact_test/consumer
+        run: |
+            echo ""
+            echo "=============================="
+            echo "//== CONSUMER PACT TEST  ==//"
+            echo "=============================="
+            echo ""
+            rm -rf pacts logs && mkdir -p pacts logs
+            npm test
+      
+      - name: PUBLISH CONSUMER CONTRACT
+        working-directory: /workspace/conduit/monorepo/frontend/pact_test/consumer/pacts
+        run: |
+            echo ""
+            echo "==========================="
+            echo "//== PUBLISH CONSUMER  ==//"
+            echo "==========================="
+            echo ""
+            pact-broker publish . --broker-base-url http://pact-broker:9292 --consumer-app-version=${{ github.sha }}

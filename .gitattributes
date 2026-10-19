@@ -1,0 +1,5 @@
+# Normalize line endings: store LF in the repository
+* text=auto
+
+# Shell scripts must keep LF (executed in WSL/Linux)
+*.sh text eol=lf

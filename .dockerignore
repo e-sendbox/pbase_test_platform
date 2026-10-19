@@ -1,0 +1,64 @@
+# Git
+.git/
+.gitignore
+.github/
+.gitea/
+workspace/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Documentation
+*.md
+!README.md
+session-*.md
+
+# Tests (will be explicitly copied if needed)
+tests/
+
+# Development
+.env
+.env.local
+.ruff_cache/
+
+# Original repos (already copied to backend/frontend)
+fastapi-realworld-example-app/
+react-redux-realworld-example-app/
+
+# Backend specific
+backend/.git/
+backend/tests/
+backend/scripts/
+backend/postman/
+backend/postgres-data/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/*.pyc
+backend/**/*.pyc
+backend/.coverage
+backend/.pytest_cache/
+
+# Frontend specific
+frontend/.git/
+frontend/node_modules/
+frontend/build/
+frontend/dist/
+
+<<<<<<< HEAD
+# Scripts: ignore all except seed (baked into app image in docker/app/Dockerfile)
+scripts/*
+!scripts/seed-database.py
+=======
+# Scripts (not needed in container)
+scripts/
+>>>>>>> gitea/main
+
+# Docker files
+docker-compose.yml
+*.dockerfile
+
+# Misc
+QUICKSTART.md

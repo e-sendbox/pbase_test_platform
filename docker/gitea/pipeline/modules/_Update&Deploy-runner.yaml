@@ -1,0 +1,85 @@
+name: Conduit - Update ACT-RUNNER
+
+on:
+  workflow_call:
+
+jobs:
+  unit:
+    name: Update ACT-RUNNER
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+      DATABASE_URL: postgresql://postgres@db:5432/conduit_db
+      SECRET_KEY: test-secret-key-test-secret-key-00000000
+      APP_ENV: test
+    steps:
+      - name: Checkout code into conduit-act-runner
+        run: |
+          echo ""
+          echo "========================================="
+          echo "//== CHECKOUT TO CONDUIT-ACT-RUNNER  ==//"
+          echo "========================================="
+          echo ""
+          mkdir -p /workspace/conduit/monorepo || true
+          cd /workspace/conduit/monorepo
+          git init || true
+          git config --global safe.directory '*' || true
+          (git remote set-url origin "$GITEA_REPO" 2>/dev/null || git remote add origin "$GITEA_REPO")
+          git fetch origin main && git reset --hard origin/main  
+
+      
+      #- name: Prepare Pact Vendoring
+      #  timeout-minutes: 25  # <--- Вот здесь ставим лимит времени (в минутах)
+      #  working-directory: /workspace/conduit/monorepo/frontend/
+      #  run: |
+      #    echo ""
+      #    echo "========================"
+      #    echo "//== PACT LIBRARY  ==//"
+      #    echo "========================"
+      #    echo ""
+
+      #    if [ -d "node_modules/@pact-foundation" ]; then
+      #      echo "✅ Пакт уже на месте"
+      #    else
+      #      echo "🧩 Склеиваю..."
+      #      cat ../docker/runner/pact_pkg/pact-bundle.part.* > pact-bundle.tar.gz
+
+      #      echo "📦 Распаковываю (с логами, чтобы не уснул)..."
+      #      mkdir -p node_modules
+      #      # Добавил флаг -v для визуализации прогресса
+      #      tar -xzvf pact-bundle.tar.gz -C .
+
+      #      # ПРОВЕРКА: реально ли файлы появились?
+      #      echo "🔍 Проверка содержимого:"
+      #      ls -ld node_modules/@pact-foundation || echo "❌ ОШИБКА: папка не создалась!"
+
+      #      rm pact-bundle.tar.gz
+      #      echo "🏁 Этап распаковки завершен успешно."
+      #    fi
+      
+      
+      - name: Install All Dependencies
+        working-directory: /workspace/conduit/monorepo/
+        run: |
+          echo ""
+          echo "================================="
+          echo "//== INSTALL DEPENDENCIES  ==//"
+          echo "================================="
+          echo ""
+          
+          echo "::group::Installing NPM Dependencies" 
+          cd frontend
+          npm config set registry https://registry.npmjs.org/ || true
+          npm install --no-audit --no-fund
+          echo "::endgroup::"
+    
+          echo "::group::Installing Poetry Dependencies"
+          cd ../backend && poetry install
+          echo "::endgroup::"
+
+          echo "::group::Installing Pact NPM Dependencies" 
+          cd ../frontend/pact_test/consumer
+          npm config set registry https://registry.npmjs.org/ || true
+          npm install --no-audit --no-fund
+          echo "::endgroup::"
+

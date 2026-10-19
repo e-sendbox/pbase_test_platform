@@ -1,0 +1,37 @@
+name: Conduit - Pact Can I Deploy BACKEND
+
+on:
+  workflow_call:
+
+jobs:
+  pact:
+    name: Pact Provider Verifier Backend
+    runs-on: self-hosted
+    steps:     
+      - name: Pact Can I Deploy Backend to STAGE
+        run: |
+          echo ""
+          echo "====================================="
+          echo "//== can-i-deploy Backend check  ==//"
+          echo "====================================="
+          echo ""
+          pact-broker can-i-deploy \
+            --pacticipant conduit-backend \
+            --version ${{ github.sha }} \
+            --to-environment staging \
+            --broker-base-url http://pact-broker:9292 \
+            --retry-while-unknown 30 \
+            --retry-interval 10
+
+      - name: Record provider deployment in broker
+        run: |
+          echo ""
+          echo "====================================="
+          echo "//== record Backend to Brocker  ==//"
+          echo "====================================="
+          echo ""
+          pact-broker record-deployment \
+            --pacticipant conduit-backend \
+            --version ${{ github.sha }} \
+            --environment staging \
+            --broker-base-url http://pact-broker:9292 

@@ -1,0 +1,29 @@
+name: Conduit - Integration Test
+
+on:
+  workflow_call:
+
+jobs:
+  lint: 
+    name: Integration Test
+    runs-on: self-hosted
+    env:
+      GITEA_REPO: "http://gitea:3000/conduit/monorepo.git"
+    steps:
+      - name: Reset DB and seed demo data
+        run: |
+          set -e
+          docker exec conduit-db psql -U postgres -d conduit_db -c "TRUNCATE TABLE articles, users, tags RESTART IDENTITY CASCADE;"
+          docker exec conduit-app python /scripts/seed-database.py
+
+      - name: Install Poetry in app container
+        run: docker exec conduit-app sh -c "pip install -q poetry && poetry config virtualenvs.create false"
+
+      - name: Install backend dependencies (pytest)
+        run: docker exec conduit-app sh -c "cd /workspace/conduit/monorepo/backend && poetry install"
+
+      - name: Run API integration tests
+        run: |
+          docker exec \
+            -e BASE_URL="$BASE_URL" \
+            conduit-app sh -c "cd /workspace/conduit/monorepo/backend && poetry run pytest ../app_test/api --no-cov -v"

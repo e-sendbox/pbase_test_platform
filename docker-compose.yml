@@ -1,0 +1,163 @@
+services:
+  # PostgreSQL Database - Shared by all services
+  db:
+    image: postgres:15-alpine
+    container_name: conduit-db
+    environment:
+      POSTGRES_HOST_AUTH_METHOD: trust
+      POSTGRES_USER: postgres
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./docker/db/init-databases.sql:/docker-entrypoint-initdb.d/init-databases.sql
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    networks:
+      conduit-network:
+        aliases:
+          - db
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 20
+
+  # Pact Broker - Contract Testing Registry
+  pact-broker:
+    image: pactfoundation/pact-broker:latest
+    container_name: conduit-pact-broker
+    environment:
+      PACT_BROKER_DATABASE_URL: "postgresql://postgres@db/pactbroker_db"
+      PACT_BROKER_ALLOW_DANGEROUS_CONTRACT_MODIFICATION: "true"
+      PACT_BROKER_LOG_LEVEL: INFO
+      PACT_BROKER_WEBHOOK_SCHEME_WHITELIST: "http,https"
+      PACT_BROKER_WEBHOOK_HOST_WHITELIST: "gitea,localhost,host.docker.internal"
+    ports:
+      - "${PACT_BROKER_PORT:-9292}:9292"
+    networks:
+      conduit-network:
+        aliases:
+          - pact-broker
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://0.0.0.0:9292/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # Gitea - Git Repository and CI/CD
+  gitea:
+    image: gitea/gitea:1.26.0
+    container_name: conduit-gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - GITEA__database__DB_TYPE=postgres
+      - GITEA__database__HOST=db:5432
+      - GITEA__database__NAME=gitea_db
+      - GITEA__database__USER=postgres
+      - GITEA__database__PASSWD=
+    volumes:
+      - gitea_data:/data
+      - ./docker/gitea/app.ini:/data/gitea/conf/app.ini
+      - /etc/timezone:/etc/timezone:ro
+      - /etc/localtime:/etc/localtime:ro
+    ports:
+      - "${GITEA_PORT:-3001}:3000"
+      - "${GITEA_SSH_PORT:-2222}:22"
+    networks:
+      conduit-network:
+        aliases:
+          - gitea
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+  # Gitea Actions Runner (custom image extends upstream with Node/npm for JS actions)
+  act-runner:
+    image: conduit-act-runner:local
+    build:
+      context: .
+      dockerfile: docker/runner/Dockerfile
+    container_name: conduit-act-runner
+    environment:
+      CONFIG_FILE: /data/config.yaml
+      GITEA_INSTANCE_URL: "http://gitea:3000"
+      GITEA_RUNNER_REGISTRATION_TOKEN: "${GITEA_RUNNER_TOKEN}"
+      GITEA_RUNNER_TOKEN: "${GITEA_RUNNER_TOKEN}"
+      ACTIONS_CACHE_URL: "http://gitea:3000"
+      ACTIONS_RUNTIME_URL: "http://gitea:3000"   
+    volumes:
+      - ./docker/runner/config.yaml:/data/config.yaml
+      - act_runner_data:/data
+      - /var/run/docker.sock:/var/run/docker.sock
+      - ./workspace:/workspace 
+    networks:
+      conduit-network:
+        aliases:
+          - act-runner
+    depends_on:
+      gitea:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Application Container - Frontend + Backend (Nginx + FastAPI)
+  app:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+      args:
+        BUILDKIT_INLINE_CACHE: 1
+    container_name: conduit-app
+    environment:
+      # Database
+      DATABASE_URL: "postgresql://postgres@db:5432/conduit_db"
+      POSTGRES_HOST: db
+      POSTGRES_PORT: 5432
+      POSTGRES_DB: conduit_db
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: ""
+      # App Config
+      SECRET_KEY: "${SECRET_KEY:-your-secret-key-change-in-production}"
+      APP_ENV: "${APP_ENV:-prod}"
+      # Pact Broker
+      PACT_BROKER_BASE_URL: "http://pact-broker:9292"
+    volumes:
+      - ./scripts:/scripts:ro
+      - ./workspace:/workspace
+    ports:
+      - "${APP_PORT:-3000}:80"
+    networks:
+      conduit-network:
+        aliases:
+          - app
+    depends_on:
+      db:
+        condition: service_healthy
+      pact-broker:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:80/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
+
+networks:
+  # Shared name for app, db, gitea, pact-broker, and act-runner job containers (see docker/runner/config.yaml)
+  conduit-network:
+    external: true
+    name: conduit-network
+
+volumes:
+  postgres_data:
+  gitea_data:
+  act_runner_data:
